@@ -127,12 +127,12 @@ def _add_room_box(spec: mujoco.MjSpec) -> None:
 
     # (face file, center, inward-normal, in-plane up, hflip, vflip)
     walls = [
-        (faces[3], (cx, 0, fh), (0, 0, 1), (1, 0, 0), False, False),  # D -> floor
+        (faces[3], (cx, 0, fh), (0, 0, 1), (0, 1, 0), False, False),  # D -> floor
         (
             faces[2],
             (cx, 0, fh + 2 * s),
             (0, 0, -1),
-            (1, 0, 0),
+            (0, 1, 0),
             False,
             False,
         ),  # U -> ceiling
