@@ -14,7 +14,7 @@ import mujoco
 import numpy as np
 
 from pick_place_challenge.assets import ensure_objects, object_dir
-from pick_place_challenge.polyhaven import ball_obj_path
+from pick_place_challenge.polyhaven import ball_diffuse_path, ball_obj_path
 
 BALL_DIAMETER: float = 0.072  # ~tennis/baseball scale; fits the 85 mm gripper
 BOWL_NAME: str = "Cole_Hardware_Deep_Bowl_Good_Earth_1075"
@@ -43,6 +43,11 @@ def get_ball_spec(diameter: float = BALL_DIAMETER) -> mujoco.MjSpec:
     spec = mujoco.MjSpec()
     mesh = spec.add_mesh(name="ball_mesh", file=obj)
     mesh.scale = [scale, scale, scale]
+    # Real diffuse texture from Poly Haven, mapped via the mesh's UVs.
+    tex = spec.add_texture(name="ball_tex", type=mujoco.mjtTexture.mjTEXTURE_2D)
+    tex.file = str(ball_diffuse_path())
+    ball_mat = spec.add_material(name="ball_mat")
+    ball_mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "ball_tex"
     body = spec.worldbody.add_body(name="ball")
     body.add_freejoint()
     vis = body.add_geom(name="ball_visual")
@@ -50,7 +55,7 @@ def get_ball_spec(diameter: float = BALL_DIAMETER) -> mujoco.MjSpec:
     vis.meshname = "ball_mesh"
     vis.group = 2
     vis.contype, vis.conaffinity = 0, 0
-    vis.rgba = [0.95, 0.95, 0.90, 1.0]  # baseball white
+    vis.material = "ball_mat"
     col = body.add_geom(name="ball_collision")
     col.type = mujoco.mjtGeom.mjGEOM_SPHERE
     col.size = [r, 0, 0]

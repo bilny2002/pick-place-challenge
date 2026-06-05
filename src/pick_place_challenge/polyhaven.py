@@ -61,6 +61,16 @@ def ball_obj_path(asset_id: str = BALL_ID, res: str = "1k") -> Path:
     return obj
 
 
+def ball_diffuse_path(asset_id: str = BALL_ID, res: str = "1k") -> Path:
+    """Path to the ball's diffuse texture as PNG (MuJoCo requires PNG)."""
+    ball_obj_path(asset_id, res)  # ensure fetched
+    tex_dir = _CACHE / "models" / asset_id / "src" / "textures"
+    png = tex_dir / f"{asset_id}_diff_{res}.png"
+    if not png.exists():
+        Image.open(tex_dir / f"{asset_id}_diff_{res}.jpg").convert("RGB").save(png)
+    return png
+
+
 # ---------------------------------------------------------------- HDRI skybox
 
 # py360convert returns Y-up faces keyed F/R/B/L/U/D; MuJoCo skybox is Z-up and
