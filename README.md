@@ -1,8 +1,9 @@
 # pick-place-challenge
 
 A small, self-contained robotics sandbox: a **Franka Panda + Robotiq 2F-85**
-doing **pick-and-place** in [mjlab](https://github.com/mujocolab/mjlab)
-(GPU-accelerated MuJoCo, Isaac-Lab-style manager API).
+doing **pick-and-place** of a real **scanned object** on a table, in
+[mjlab](https://github.com/mujocolab/mjlab) (GPU-accelerated MuJoCo,
+Isaac-Lab-style manager API).
 
 **This is not a graded take-home.** There's no target metric and no expert policy
 to beat. It's a thing to play with. Pick a direction that interests you, go down
@@ -15,8 +16,11 @@ talk. Email us anytime to ask what we'd find impressive — genuinely, ask.
 
 ```bash
 uv sync                                   # install everything (locked)
-uv run python scripts/view_scene.py       # look at the robot (CPU, no GPU needed)
+uv run python scripts/view_scene.py       # look at the robot + table (CPU, no GPU needed)
 ```
+
+The pickable objects (a handful of [Google Scanned Objects](https://github.com/kevinzakka/mujoco_scanned_objects))
+are fetched on first use into `~/.cache`. To pre-fetch them: `uv run pick-place-fetch-assets`.
 
 Drive it with a random policy and watch it in an interactive viewer:
 
@@ -103,6 +107,12 @@ or `--device cpu` style flags where mjlab exposes them, to stay on CPU.
   gripper at runtime from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)
   (pulled by `robot_descriptions`; nothing vendored). The 2F-85's full mimic
   linkage is kept — it simulates correctly in MuJoCo-Warp.
+- `src/pick_place_challenge/objects.py` + `assets.py` — fetch and load a curated
+  set of scanned objects (free-jointed, auto-rescaled so the gripper can close on
+  any of them). Swap the pick target via `DEFAULT_OBJECT` in `assets.py`.
+- `src/pick_place_challenge/world.py` — the studio room + table backdrop (decor is
+  visual-only; the table top at `z=0` is the one collider). Drop in wood/tile
+  texture PNGs here for more realism.
 - `src/pick_place_challenge/tasks/` — the two env configs + registration. They
   reuse mjlab's `lift_cube` manipulation MDP terms.
 - `scripts/` — `view_scene.py` (pure-MuJoCo viewer), `random_rollout.py`

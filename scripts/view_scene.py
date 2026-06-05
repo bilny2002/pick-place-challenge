@@ -10,43 +10,22 @@ import mujoco
 import mujoco.viewer
 
 from pick_place_challenge.robots.franka_robotiq import build_franka_robotiq_spec
+from pick_place_challenge.world import add_studio
 
 
 def build_scene_spec() -> mujoco.MjSpec:
-    """Franka + Robotiq with a checkered floor and a red cube to look at."""
+    """Franka + Robotiq in the studio room + table (same world as the env)."""
     spec = build_franka_robotiq_spec()
+    add_studio(spec)
 
-    # Checkered ground plane + light.
-    spec.add_texture(
-        name="grid",
-        type=mujoco.mjtTexture.mjTEXTURE_2D,
-        builtin=mujoco.mjtBuiltin.mjBUILTIN_CHECKER,
-        rgb1=(0.2, 0.3, 0.4),
-        rgb2=(0.1, 0.15, 0.2),
-        width=300,
-        height=300,
-    )
-    mat = spec.add_material(name="grid")
-    mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "grid"
-    mat.texuniform = True
-    mat.texrepeat = [4, 4]
-    spec.worldbody.add_geom(
-        name="floor",
-        type=mujoco.mjtGeom.mjGEOM_PLANE,
-        size=(2.0, 2.0, 0.05),
-        material="grid",
-    )
-    light = spec.worldbody.add_light()
-    light.pos = [0.0, 0.0, 2.0]
-    light.dir = [0.0, 0.0, -1.0]
-
-    # A red cube sitting in front of the arm.
-    cube = spec.worldbody.add_body(name="cube", pos=(0.35, 0.0, 0.02))
+    # A red cube on the table as a stand-in pick target (the env uses a scanned
+    # object; this keeps the CPU viewer dependency-free and offline).
+    cube = spec.worldbody.add_body(name="cube", pos=(0.35, 0.0, 0.03))
     cube.add_freejoint(name="cube_joint")
     cube.add_geom(
         name="cube_geom",
         type=mujoco.mjtGeom.mjGEOM_BOX,
-        size=(0.02, 0.02, 0.02),
+        size=(0.025, 0.025, 0.025),
         mass=0.05,
         rgba=(0.8, 0.2, 0.2, 1.0),
     )

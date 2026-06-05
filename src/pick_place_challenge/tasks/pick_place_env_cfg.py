@@ -22,9 +22,9 @@ from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationT
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import CameraSensorCfg
 from mjlab.tasks.manipulation import mdp as manipulation_mdp
-from mjlab.tasks.manipulation.config.yam.env_cfgs import get_cube_spec
 from mjlab.tasks.manipulation.lift_cube_env_cfg import make_lift_cube_env_cfg
 
+from pick_place_challenge.objects import make_object_spec_fn
 from pick_place_challenge.robots.franka_robotiq import (
     ARM_ACTION_SCALE,
     GRASP_SITE,
@@ -32,6 +32,7 @@ from pick_place_challenge.robots.franka_robotiq import (
     GRIPPER_TENDON,
     get_franka_robotiq_robot_cfg,
 )
+from pick_place_challenge.world import add_studio
 
 # The 2F-85 base body (after attach) — parent for the wrist camera.
 _GRIPPER_BODY = "base"
@@ -41,11 +42,15 @@ def franka_pick_place_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     """State-based Franka pick-and-place."""
     cfg = make_lift_cube_env_cfg()
 
-    # Robot + a single free-floating cube to pick.
+    # Robot + a single scanned object to pick. The object entity is still keyed
+    # "cube" so the reused lift_cube reward/command terms find it.
     cfg.scene.entities = {
         "robot": get_franka_robotiq_robot_cfg(),
-        "cube": EntityCfg(spec_fn=get_cube_spec),
+        "cube": EntityCfg(spec_fn=make_object_spec_fn()),
     }
+    # Replace the flat ground plane with a room + table (table top at z=0).
+    cfg.scene.terrain = None
+    cfg.scene.spec_fn = add_studio
 
     # Actions: 7 arm joints (position) + gripper tendon. The tendon "length"
     # target is written straight to ctrl (0=open .. 255=closed); map a [-1, 1]
@@ -79,10 +84,15 @@ def franka_pick_place_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.terminations.pop("ee_ground_collision", None)
     cfg.curriculum = {}
 
-    # Track the arm base in the viewer; give the solver headroom for the extra
-    # gripper contacts.
+    # Spawn the object clearly above the table top so it settles cleanly
+    # regardless of the scanned mesh's origin (instead of the cube's ~2cm).
+    assert cfg.commands is not None
+    cfg.commands["lift_height"].object_pose_range.z = (0.06, 0.06)
+
+    # Track the arm base in the viewer; give the solver headroom for the
+    # object's 32-piece convex decomposition plus gripper contacts.
     cfg.viewer.body_name = "link0"
-    cfg.sim.nconmax = max(cfg.sim.nconmax or 0, 150)
+    cfg.sim.nconmax = max(cfg.sim.nconmax or 0, 400)
 
     if play:
         cfg.episode_length_s = int(1e9)

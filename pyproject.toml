@@ -18,6 +18,7 @@ dependencies = [
 play = "pick_place_challenge.cli:play"
 train = "pick_place_challenge.cli:train"
 pick-place-envs = "pick_place_challenge.cli:list_envs"
+pick-place-fetch-assets = "pick_place_challenge.assets:fetch_cli"
 
 [dependency-groups]
 dev = ["pytest>=8", "ruff>=0.6"]
