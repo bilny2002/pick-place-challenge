@@ -136,10 +136,10 @@ def _add_room_box(spec: mujoco.MjSpec) -> None:
             False,
             False,
         ),  # U -> ceiling
-        (faces[0], (cx + s, 0, cz), (-1, 0, 0), (0, 0, 1), False, True),  # R -> +x wall
-        (faces[1], (cx - s, 0, cz), (1, 0, 0), (0, 0, 1), False, True),  # L -> -x wall
-        (faces[4], (cx, s, cz), (0, -1, 0), (0, 0, 1), False, True),  # F -> +y wall
-        (faces[5], (cx, -s, cz), (0, 1, 0), (0, 0, 1), False, True),  # B -> -y wall
+        (faces[0], (cx + s, 0, cz), (-1, 0, 0), (0, 0, 1), False, False),  # R -> +x wall
+        (faces[1], (cx - s, 0, cz), (1, 0, 0), (0, 0, 1), False, False),  # L -> -x wall
+        (faces[4], (cx, s, cz), (0, -1, 0), (0, 0, 1), False, False),  # F -> +y wall
+        (faces[5], (cx, -s, cz), (0, 1, 0), (0, 0, 1), False, False),  # B -> -y wall
     ]
     quad = spec.add_mesh(name="wall_quad", file=str(_quad_obj_path()))
     quad.scale = [s, s, 1.0]
