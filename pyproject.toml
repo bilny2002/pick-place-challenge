@@ -1,7 +1,7 @@
 [project]
 name = "pick-place-challenge"
 version = "0.1.0"
-description = "Add your description here"
+description = "Open-ended Franka + Robotiq pick-and-place sandbox on mjlab (Index Robotics)."
 readme = "README.md"
 authors = [
     { name = "Ben Eisner", email = "ben@indexrobots.ai" }
@@ -13,7 +13,14 @@ dependencies = [
 ]
 
 [project.scripts]
-pick-place-challenge = "pick_place_challenge:main"
+# These shadow mjlab's identically-named entry points so our tasks are
+# registered before the CLI runs. Same flags as mjlab's play/train.
+play = "pick_place_challenge.cli:play"
+train = "pick_place_challenge.cli:train"
+pick-place-envs = "pick_place_challenge.cli:list_envs"
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]
