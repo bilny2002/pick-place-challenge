@@ -14,8 +14,31 @@ import json
 import math
 from pathlib import Path
 
+import numpy as np
 import objaverse
 import trimesh
+
+
+def _interior_floor_z(mesh: trimesh.Trimesh) -> float:
+    """Height of the interior floor: the largest up-facing horizontal surface.
+
+    The mesh's lowest point is usually exterior/under-slab geometry (which faces
+    *down*), not the floor you stand on. The floor is the big surface whose
+    normals point up, so we take the area-weighted-most-common z among up-facing
+    faces. Furniture tops also face up but have far less area.
+    """
+    normals = mesh.face_normals
+    up = normals[:, 2] > 0.9
+    if not up.any():
+        return float(mesh.bounds[0][2])
+    z = mesh.triangles_center[up, 2]
+    area = mesh.area_faces[up]
+    bins = np.round(z / 0.02).astype(int)  # 2 cm bins
+    totals: dict[int, float] = {}
+    for b, a in zip(bins, area, strict=True):
+        totals[int(b)] = totals.get(int(b), 0.0) + float(a)
+    return max(totals, key=totals.get) * 0.02
+
 
 ROOM_UID = "581238dc5fda4dc990571cdc02827783"
 _CACHE = Path.home() / ".cache" / "pick_place_challenge" / "rooms"
@@ -45,8 +68,10 @@ def room_assets(uid: str = ROOM_UID) -> tuple[Path, Path, dict]:
     lo, hi = mesh.bounds
     mesh.apply_scale(_CEILING_HEIGHT / float(hi[2] - lo[2]))
     lo, hi = mesh.bounds
-    # Floor (the room's lowest surface) -> z=0; center the footprint in x/y.
-    mesh.apply_translation([-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2]])
+    # Interior floor -> z=0 (not the mesh min-z, which is exterior under-slab
+    # geometry); center the footprint in x/y.
+    floor_z = _interior_floor_z(mesh)
+    mesh.apply_translation([-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -floor_z])
 
     image = mesh.visual.material.baseColorTexture
     image.convert("RGB").save(tex)
