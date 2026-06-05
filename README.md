@@ -118,8 +118,10 @@ or `--device cpu` style flags where mjlab exposes them, to stay on CPU.
   its cavity, so the ball nests inside). Tweak `BALL_DIAMETER`, `BOWL_NAME`.
 - `src/pick_place_challenge/polyhaven.py` + `assets.py` — on-demand fetch of the
   Poly Haven ball/HDRI and the scanned bowl. Swap the room via `HDRI_ID`.
-- `src/pick_place_challenge/world.py` — the table + floor, and the HDRI skybox
-  (the "room"). The table top at `z=0` is the only collider; the rest is decor.
+- `src/pick_place_challenge/world.py` — the table + the room, built as six
+  textured walls from the HDRI's cube faces (geometry, so it shows in the Viser
+  browser viewer too — a MuJoCo skybox would not). The table top at `z=0` is the
+  only collider; the rest is decor.
 - `src/pick_place_challenge/mdp.py` — the reach-and-place reward, ball→bowl
   observation, and the "placed in bowl" success check.
 - `src/pick_place_challenge/tasks/` — the two env configs + registration, built on
