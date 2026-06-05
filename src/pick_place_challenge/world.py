@@ -16,7 +16,6 @@ _TABLE_CENTER = (0.3, 0.0)
 _TABLE_HALF = (0.45, 0.4)
 _TOP_THICK = 0.02
 _LEG = 0.03
-_ROOM_CX = 0.2  # garage centered roughly on the workspace in x
 
 
 def _add_material(spec, name, rgba, reflectance=0.0):
@@ -25,23 +24,26 @@ def _add_material(spec, name, rgba, reflectance=0.0):
     return mat
 
 
-def _add_garage(spec: mujoco.MjSpec) -> None:
-    """Add the Objaverse garage room mesh (visual only), floor at table height."""
-    from pick_place_challenge.room import garage_assets
+def _add_room(spec: mujoco.MjSpec) -> None:
+    """Add the Objaverse room mesh (visual only), floor at table-leg height."""
+    from pick_place_challenge.room import room_assets
 
-    obj, tex, _ = garage_assets()
-    mesh = spec.add_mesh(name="garage", file=str(obj))
+    obj, tex, _ = room_assets()
+    mesh = spec.add_mesh(name="room_mesh", file=str(obj))
     mesh.inertia = mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL
-    t = spec.add_texture(name="garage_tex", type=mujoco.mjtTexture.mjTEXTURE_2D)
+    t = spec.add_texture(name="room_tex", type=mujoco.mjtTexture.mjTEXTURE_2D)
     t.file = str(tex)
-    mat = spec.add_material(name="garage_mat")
-    mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "garage_tex"
+    mat = spec.add_material(name="room_mat")
+    mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "room_tex"
     room = spec.worldbody.add_body(name="room")
-    g = room.add_geom(name="garage")
+    g = room.add_geom(name="room_geom")
     g.type = mujoco.mjtGeom.mjGEOM_MESH
-    g.meshname = "garage"
-    g.material = "garage_mat"
-    g.pos = [_ROOM_CX, 0.0, -TABLE_HEIGHT]  # drop floor to the table-leg height
+    g.meshname = "room_mesh"
+    g.material = "room_mat"
+    # Centered on the workspace (room-local origin = under the table), floor at
+    # the table-leg height, rotated 180° about z so the robot faces into the room.
+    g.pos = [_TABLE_CENTER[0], _TABLE_CENTER[1], -TABLE_HEIGHT]
+    g.quat = [0.0, 0.0, 0.0, 1.0]
     g.group = 2
     g.contype, g.conaffinity = 0, 0
 
@@ -58,7 +60,7 @@ def add_studio(spec: mujoco.MjSpec) -> None:
     key.castshadow = True
     key.diffuse = [0.7, 0.7, 0.7]
 
-    _add_garage(spec)
+    _add_room(spec)
 
     _add_material(spec, "table_mat", (0.30, 0.22, 0.16, 1.0))
     _add_material(spec, "leg_mat", (0.20, 0.20, 0.22, 1.0))
@@ -85,11 +87,14 @@ def add_studio(spec: mujoco.MjSpec) -> None:
         "table_mat",
         collide=True,
     )
+    # Legs span from just under the table top (z=0) down to the floor (z=fh),
+    # so the feet sit exactly on the room floor.
+    leg_half_h = abs(fh) / 2
     for sx in (-1, 1):
         for sy in (-1, 1):
             _box(
                 f"leg_{sx}_{sy}",
-                (cx + sx * (hx - _LEG), cy + sy * (hy - _LEG), fh / 2 - _TOP_THICK),
-                (_LEG, _LEG, abs(fh) / 2),
+                (cx + sx * (hx - _LEG), cy + sy * (hy - _LEG), fh + leg_half_h),
+                (_LEG, _LEG, leg_half_h),
                 "leg_mat",
             )
