@@ -1,11 +1,12 @@
 # pick-place-challenge
 
 A small, self-contained robotics sandbox: a **Franka Panda + Robotiq 2F-85**
-that must **pick up a ball and place it in a bowl** on a table, in a real
-HDRI-lit room, using [mjlab](https://github.com/mujocolab/mjlab)
-(GPU-accelerated MuJoCo, Isaac-Lab-style manager API). The ball (a Poly Haven
-mesh) and bowl (a scanned object whose cavity actually holds the ball) are real
-assets, not primitives.
+that must **pick up a ball and place it in a bowl** on a table, inside a real
+modeled room (an Objaverse parking garage), using
+[mjlab](https://github.com/mujocolab/mjlab) (GPU-accelerated MuJoCo,
+Isaac-Lab-style manager API). The ball (a Poly Haven mesh), bowl (a scanned
+object whose cavity actually holds the ball), and room are real assets, not
+primitives.
 
 **This is not a graded take-home.** There's no target metric and no expert policy
 to beat. It's a thing to play with. Pick a direction that interests you, go down
@@ -21,10 +22,12 @@ uv sync                                   # install everything (locked)
 uv run python scripts/view_scene.py       # look at the robot + table (CPU, no GPU needed)
 ```
 
-Assets (the [Poly Haven](https://polyhaven.com) ball mesh + room HDRI, and the
-scanned bowl from [mujoco_scanned_objects](https://github.com/kevinzakka/mujoco_scanned_objects))
-are fetched on first use into `~/.cache`. Pre-fetch them with:
-`uv run pick-place-fetch-assets` and `uv run pick-place-fetch-ph`.
+Assets — the [Poly Haven](https://polyhaven.com) ball mesh, the scanned bowl from
+[mujoco_scanned_objects](https://github.com/kevinzakka/mujoco_scanned_objects),
+and the [Objaverse](https://objaverse.allenai.org) room mesh — are fetched on
+first use into `~/.cache` (the room is ~tens of MB, so first launch takes a
+moment). Pre-fetch with `uv run pick-place-fetch-assets` and
+`uv run pick-place-fetch-ph`.
 
 Drive it with a random policy and watch it in an interactive viewer:
 
@@ -88,7 +91,7 @@ Open-ended. Some rabbit holes, roughly easy → hard — **you don't have to pic
 - **Performance.** Profile the env, push `--env.scene.num-envs` as high as it goes,
   make rendering or stepping faster.
 - **Make it harder / more realistic.** Move/clutter the bowl, add distractor
-  objects, domain-randomize textures and lighting, swap the HDRI or the gripper.
+  objects, domain-randomize textures and lighting, swap the room or the gripper.
 
 Surprise us. The "what" matters less than that it's thoughtful and works.
 
@@ -116,12 +119,13 @@ or `--device cpu` style flags where mjlab exposes them, to stay on CPU.
 - `src/pick_place_challenge/objects.py` — the ball (a real Poly Haven mesh with a
   sphere collider) and the bowl (a scanned object whose convex decomposition keeps
   its cavity, so the ball nests inside). Tweak `BALL_DIAMETER`, `BOWL_NAME`.
-- `src/pick_place_challenge/polyhaven.py` + `assets.py` — on-demand fetch of the
-  Poly Haven ball/HDRI and the scanned bowl. Swap the room via `HDRI_ID`.
-- `src/pick_place_challenge/world.py` — the table + the room, built as six
-  textured walls from the HDRI's cube faces (geometry, so it shows in the Viser
-  browser viewer too — a MuJoCo skybox would not). The table top at `z=0` is the
-  only collider; the rest is decor.
+- `src/pick_place_challenge/polyhaven.py` / `assets.py` / `room.py` — on-demand
+  fetch of the Poly Haven ball, the scanned bowl, and the Objaverse room mesh.
+  Swap the room via `GARAGE_UID` in `room.py` (any Objaverse uid).
+- `src/pick_place_challenge/world.py` — the table + the room. The room is a real
+  textured mesh (visual-only), so it renders in the Viser browser viewer as well
+  as the native viewer/cameras. The table top at `z=0` is the only collider; the
+  rest is decor.
 - `src/pick_place_challenge/mdp.py` — the reach-and-place reward, ball→bowl
   observation, and the "placed in bowl" success check.
 - `src/pick_place_challenge/tasks/` — the two env configs + registration, built on

@@ -7,9 +7,14 @@ Franka Emika Panda and Robotiq 2F-85 MJCFs come from
 [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie),
 licensed under the Apache License 2.0 (with per-model licenses therein).
 
-## Ball mesh & room backdrop — Poly Haven
-The ball mesh (`baseball_01`) and the indoor HDRI used for the skybox come from
-[Poly Haven](https://polyhaven.com), released under **CC0** (public domain).
+## Ball mesh — Poly Haven
+The ball mesh (`baseball_01`) comes from [Poly Haven](https://polyhaven.com),
+released under **CC0** (public domain).
+
+## Room mesh — Objaverse
+The room is an Objaverse model (`778f5663…`, an empty parking garage), licensed
+**CC-BY** (attribution to its Sketchfab author). Fetched via the `objaverse`
+package.
 
 ## Bowl & other objects — Google Scanned Objects (via `mujoco_scanned_objects`)
 The pickable objects are fetched from
