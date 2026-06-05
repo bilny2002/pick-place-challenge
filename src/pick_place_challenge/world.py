@@ -12,10 +12,34 @@ task/reward math is unchanged.
 from __future__ import annotations
 
 import math
+from pathlib import Path
 
 import mujoco
 
 from pick_place_challenge.polyhaven import hdri_skybox_files
+
+# A unit quad (2x2 in its local XY plane, +z normal) with UVs. Viser only
+# textures *mesh* geoms, so the room walls must be meshes, not planes/boxes.
+_QUAD_OBJ = """v -1 -1 0
+v 1 -1 0
+v 1 1 0
+v -1 1 0
+vt 0 0
+vt 1 0
+vt 1 1
+vt 0 1
+f 1/1 2/2 3/3
+f 1/1 3/3 4/4
+"""
+
+
+def _quad_obj_path() -> Path:
+    path = Path.home() / ".cache" / "pick_place_challenge" / "wall_quad.obj"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_QUAD_OBJ)
+    return path
+
 
 TABLE_HEIGHT: float = 0.4  # table top at z=0, floor at z=-TABLE_HEIGHT
 _TABLE_CENTER = (0.3, 0.0)
@@ -117,6 +141,9 @@ def _add_room_box(spec: mujoco.MjSpec) -> None:
         (faces[4], (cx, s, cz), (0, -1, 0), (0, 0, 1), False, True),  # F -> +y wall
         (faces[5], (cx, -s, cz), (0, 1, 0), (0, 0, 1), False, True),  # B -> -y wall
     ]
+    quad = spec.add_mesh(name="wall_quad", file=str(_quad_obj_path()))
+    quad.scale = [s, s, 1.0]
+    quad.inertia = mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL  # flat mesh, no volume
     room = spec.worldbody.add_body(name="room")
     for i, (tex_file, pos, normal, up, hflip, vflip) in enumerate(walls):
         tex = spec.add_texture(
@@ -126,13 +153,11 @@ def _add_room_box(spec: mujoco.MjSpec) -> None:
         tex.hflip, tex.vflip = hflip, vflip
         mat = spec.add_material(name=f"room_mat_{i}")
         mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = f"room_tex_{i}"
-        mat.texrepeat = [1, 1]
-        mat.texuniform = False
         g = room.add_geom(name=f"wall_{i}")
-        g.type = mujoco.mjtGeom.mjGEOM_PLANE
+        g.type = mujoco.mjtGeom.mjGEOM_MESH
+        g.meshname = "wall_quad"
         g.pos = list(pos)
         g.quat = list(_quat_from_axes(normal, up))
-        g.size = [s, s, 0.1]
         g.material = f"room_mat_{i}"
         g.group = 2
         g.contype, g.conaffinity = 0, 0
