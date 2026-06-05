@@ -36,15 +36,10 @@ def add_studio(spec: mujoco.MjSpec) -> None:
     spec.visual.headlight.diffuse = [0.25, 0.25, 0.25]
 
     # --- Sky + lights ---
-    spec.add_texture(
-        name="sky",
-        type=mujoco.mjtTexture.mjTEXTURE_SKYBOX,
-        builtin=mujoco.mjtBuiltin.mjBUILTIN_GRADIENT,
-        rgb1=(0.55, 0.6, 0.7),
-        rgb2=(0.1, 0.12, 0.16),
-        width=512,
-        height=512,
-    )
+    from pick_place_challenge.polyhaven import hdri_skybox_files
+
+    sky = spec.add_texture(name="sky", type=mujoco.mjtTexture.mjTEXTURE_SKYBOX)
+    sky.cubefiles = hdri_skybox_files()
     key = spec.worldbody.add_light()
     key.type = mujoco.mjtLightType.mjLIGHT_DIRECTIONAL
     key.pos = [0.4, 0.4, 1.6]
@@ -71,13 +66,12 @@ def add_studio(spec: mujoco.MjSpec) -> None:
     floor_mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "floor_tex"
     floor_mat.texrepeat = [6, 6]
     floor_mat.texuniform = True
-    _add_material(spec, "wall_mat", (0.85, 0.85, 0.88, 1.0))
     _add_material(spec, "table_mat", (0.30, 0.22, 0.16, 1.0), reflectance=0.0)
     _add_material(spec, "leg_mat", (0.20, 0.20, 0.22, 1.0))
 
     fh = -TABLE_HEIGHT  # floor height
 
-    # --- Room (visual only): floor + 3 walls ---
+    # --- Floor (visual only) — grounds the table; the HDRI skybox is the room ---
     room = spec.worldbody.add_body(name="room")
 
     def _box(body, name, pos, half, material, collide=False):
@@ -92,10 +86,7 @@ def add_studio(spec: mujoco.MjSpec) -> None:
             g.conaffinity = 0
         return g
 
-    _box(room, "floor", (0.2, 0.0, fh - 0.01), (1.6, 1.6, 0.01), "floor_mat")
-    _box(room, "wall_back", (-0.9, 0.0, fh + 0.9), (0.02, 1.6, 0.9), "wall_mat")
-    _box(room, "wall_left", (0.2, 1.2, fh + 0.9), (1.6, 0.02, 0.9), "wall_mat")
-    _box(room, "wall_right", (0.2, -1.2, fh + 0.9), (1.6, 0.02, 0.9), "wall_mat")
+    _box(room, "floor", (0.2, 0.0, fh - 0.01), (2.0, 2.0, 0.01), "floor_mat")
 
     # --- Table: collidable top at z=0 + visual legs ---
     table = spec.worldbody.add_body(name="table")

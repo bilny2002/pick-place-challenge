@@ -17,8 +17,8 @@ from pick_place_challenge.robots.franka_robotiq import (
     build_franka_robotiq_spec,
 )
 
-_STATE = "Mjlab-PickPlace-Franka-State-v0"
-_PIXELS = "Mjlab-PickPlace-Franka-Pixels-v0"
+_STATE = "Mjlab-PlaceBall-Franka-State-v0"
+_PIXELS = "Mjlab-PlaceBall-Franka-Pixels-v0"
 
 _needs_gpu = pytest.mark.skipif(
     not torch.cuda.is_available(),

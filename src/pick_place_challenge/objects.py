@@ -1,9 +1,11 @@
-"""Load a Google Scanned Object as a pickable MuJoCo entity.
+"""Pickable / receptacle objects for the place-the-ball-in-the-bowl task.
 
-Each object ships as an obj2mjcf model: a textured visual mesh (geom group 2,
-no collision) plus a 32-piece V-HACD convex decomposition (group 3, collidable).
-We add a free joint so it can be picked up, and rescale the whole object to a
-common size so the Robotiq 2F-85 can always close on it.
+- The **ball** is a real Poly Haven mesh (``baseball_01``), free-jointed, with a
+  sphere collider for clean rolling.
+- The **bowl** is a Google Scanned Object whose convex decomposition keeps its
+  cavity, so the ball actually nests inside. It is fixed (a static target).
+
+Both are rescaled to sizes that work for the Robotiq 2F-85 and the task.
 """
 
 from __future__ import annotations
@@ -11,45 +13,73 @@ from __future__ import annotations
 import mujoco
 import numpy as np
 
-from pick_place_challenge.assets import DEFAULT_OBJECT, ensure_objects, object_dir
+from pick_place_challenge.assets import ensure_objects, object_dir
+from pick_place_challenge.polyhaven import ball_obj_path
 
-# Longest object dimension after rescaling, in meters. The 2F-85 opens ~85 mm,
-# so this keeps every object graspable regardless of its real-world size.
-TARGET_MAX_DIM: float = 0.09
+BALL_DIAMETER: float = 0.072  # ~tennis/baseball scale; fits the 85 mm gripper
+BOWL_NAME: str = "Cole_Hardware_Deep_Bowl_Good_Earth_1075"
+BOWL_WIDTH: float = 0.16  # wide enough to drop the ball in comfortably
 
 
-def _visual_mesh_extent(model_xml: str) -> float:
-    """Largest bounding-box dimension of the 'model' visual mesh at unit scale."""
+def _mesh_extent(model_xml: str) -> float:
     m = mujoco.MjModel.from_xml_path(model_xml)
-    mesh_id = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_MESH, "model")
-    adr = m.mesh_vertadr[mesh_id]
-    num = m.mesh_vertnum[mesh_id]
-    verts = m.mesh_vert[adr : adr + num]
-    return float((verts.max(axis=0) - verts.min(axis=0)).max())
+    mid = mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_MESH, "model")
+    adr, num = m.mesh_vertadr[mid], m.mesh_vertnum[mid]
+    v = m.mesh_vert[adr : adr + num]
+    return float((v.max(axis=0) - v.min(axis=0)).max())
 
 
-def get_scanned_object_spec(
-    name: str = DEFAULT_OBJECT, target_max_dim: float = TARGET_MAX_DIM
-) -> mujoco.MjSpec:
-    """Return an ``MjSpec`` for one scanned object, free-jointed and rescaled."""
-    ensure_objects([name])
-    model_xml = str(object_dir(name) / "model.xml")
+def get_ball_spec(diameter: float = BALL_DIAMETER) -> mujoco.MjSpec:
+    """A real ball mesh (visual) with a sphere collider, free-jointed."""
+    obj = str(ball_obj_path())
+    # Measure the mesh so the visual + sphere collider match the target diameter.
+    tmp = mujoco.MjSpec()
+    tmp.add_mesh(name="b", file=obj)
+    tm = tmp.compile()
+    extent = float(tm.geom_rbound[0] * 2.0) if tm.ngeom else diameter
+    scale = diameter / extent if extent > 0 else 1.0
+    r = diameter / 2.0
 
-    extent = _visual_mesh_extent(model_xml)
-    scale = target_max_dim / extent if extent > 0 else 1.0
-
-    spec = mujoco.MjSpec.from_file(model_xml)
-    for mesh in spec.meshes:
-        mesh.scale = (np.array(mesh.scale) * scale).tolist()
-    # The single body is named "model"; give it a free joint so it's pickable.
-    spec.body("model").add_freejoint()
+    spec = mujoco.MjSpec()
+    mesh = spec.add_mesh(name="ball_mesh", file=obj)
+    mesh.scale = [scale, scale, scale]
+    body = spec.worldbody.add_body(name="ball")
+    body.add_freejoint()
+    vis = body.add_geom(name="ball_visual")
+    vis.type = mujoco.mjtGeom.mjGEOM_MESH
+    vis.meshname = "ball_mesh"
+    vis.group = 2
+    vis.contype, vis.conaffinity = 0, 0
+    vis.rgba = [0.95, 0.95, 0.90, 1.0]  # baseball white
+    col = body.add_geom(name="ball_collision")
+    col.type = mujoco.mjtGeom.mjGEOM_SPHERE
+    col.size = [r, 0, 0]
+    col.group = 3
+    col.mass = 0.05
+    col.friction = [1.0, 0.01, 0.001]
     return spec
 
 
-def make_object_spec_fn(name: str = DEFAULT_OBJECT):
-    """A no-arg ``spec_fn`` for an mjlab ``EntityCfg``, bound to ``name``."""
+def get_bowl_spec(name: str = BOWL_NAME, width: float = BOWL_WIDTH) -> mujoco.MjSpec:
+    """A scanned bowl, rescaled, with NO free joint (it's a fixed target)."""
+    ensure_objects([name])
+    model_xml = str(object_dir(name) / "model.xml")
+    scale = width / _mesh_extent(model_xml)
+    spec = mujoco.MjSpec.from_file(model_xml)
+    for mesh in spec.meshes:
+        mesh.scale = (np.array(mesh.scale) * scale).tolist()
+    return spec
 
+
+def make_ball_spec_fn():
     def spec_fn() -> mujoco.MjSpec:
-        return get_scanned_object_spec(name)
+        return get_ball_spec()
+
+    return spec_fn
+
+
+def make_bowl_spec_fn():
+    def spec_fn() -> mujoco.MjSpec:
+        return get_bowl_spec()
 
     return spec_fn

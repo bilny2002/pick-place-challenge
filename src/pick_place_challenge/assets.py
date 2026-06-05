@@ -19,23 +19,16 @@ _REPO = "https://github.com/kevinzakka/mujoco_scanned_objects.git"
 _COMMIT = "6ff8d275cebfd5b47e49685e3cfbe64b20e49a3c"
 _CACHE = Path.home() / ".cache" / "pick_place_challenge" / "mujoco_scanned_objects"
 
-# A graspable, recognizable, family-friendly selection. All normalized to a
-# common size at load time, so the 2F-85 can close on any of them.
+# The bowl used as the place target, plus a few extra graspable objects
+# candidates can swap in. All are rescaled at load time.
 CURATED_OBJECTS: tuple[str, ...] = (
+    "Cole_Hardware_Deep_Bowl_Good_Earth_1075",  # the task's bowl
+    "Cole_Hardware_Bowl_Scirocco_YellowBlue",
     "Cole_Hardware_Mug_Classic_Blue",
-    "ACE_Coffee_Mug_Kristen_16_oz_cup",
     "Dino_3",
-    "Dino_4",
-    "Dino_5",
     "Elephant",
-    "Android_Figure_Orange",
-    "Fisher_price_Classic_Toys_Buzzy_Bee",
     "Great_Dinos_Triceratops_Toy",
-    "Schleich_Lion_Action_Figure",
 )
-
-# Default pick target for the registered tasks. Swap to any name above.
-DEFAULT_OBJECT: str = "Cole_Hardware_Mug_Classic_Blue"
 
 
 def _run(cmd: list[str]) -> None:

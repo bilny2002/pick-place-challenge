@@ -7,7 +7,11 @@ Franka Emika Panda and Robotiq 2F-85 MJCFs come from
 [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie),
 licensed under the Apache License 2.0 (with per-model licenses therein).
 
-## Pick objects — Google Scanned Objects (via `mujoco_scanned_objects`)
+## Ball mesh & room backdrop — Poly Haven
+The ball mesh (`baseball_01`) and the indoor HDRI used for the skybox come from
+[Poly Haven](https://polyhaven.com), released under **CC0** (public domain).
+
+## Bowl & other objects — Google Scanned Objects (via `mujoco_scanned_objects`)
 The pickable objects are fetched from
 [kevinzakka/mujoco_scanned_objects](https://github.com/kevinzakka/mujoco_scanned_objects).
 - The 3D assets (OBJ meshes, PNG textures) are from Google's

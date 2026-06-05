@@ -24,8 +24,8 @@ from mjlab.envs import ManagerBasedRlEnv
 from mjlab.tasks.registry import load_env_cfg
 
 _TASKS = {
-    "state": "Mjlab-PickPlace-Franka-State-v0",
-    "pixels": "Mjlab-PickPlace-Franka-Pixels-v0",
+    "state": "Mjlab-PlaceBall-Franka-State-v0",
+    "pixels": "Mjlab-PlaceBall-Franka-Pixels-v0",
 }
 
 
