@@ -40,9 +40,10 @@ def _add_room(spec: mujoco.MjSpec) -> None:
     g.type = mujoco.mjtGeom.mjGEOM_MESH
     g.meshname = "room_mesh"
     g.material = "room_mat"
-    # Centered on the workspace (room-local origin = under the table), floor at
-    # the table-leg height, rotated 180° about z so the robot faces into the room.
-    g.pos = [_TABLE_CENTER[0], _TABLE_CENTER[1], -TABLE_HEIGHT]
+    # Floor at the table-leg height, rotated 180° about z so the robot faces into
+    # the room. Shifted +1m in x (≡ moving the workspace −1m in the robot's x) so
+    # the table sits on open floor instead of in the room's furniture.
+    g.pos = [_TABLE_CENTER[0] + 1.0, _TABLE_CENTER[1], -TABLE_HEIGHT]
     g.quat = [0.0, 0.0, 0.0, 1.0]
     g.group = 2
     g.contype, g.conaffinity = 0, 0
