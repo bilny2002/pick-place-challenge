@@ -129,8 +129,8 @@ Just two modules — `scene.py` (the physical world) and `task.py` (the task):
 - **`src/pick_place_challenge/task.py`** — where the env and its single MDP are
   wired together: the reach-and-place reward / observations / success check, the
   two env configs (`state_env_cfg`, `pixels_env_cfg`), and task registration.
-- `scripts/` — `view_scene.py` (pure-MuJoCo viewer), `random_rollout.py`
-  (env-loop example), `spike_warp.py` (the Warp compatibility check).
+- `scripts/` — `view_scene.py` (pure-MuJoCo CPU viewer, no GPU needed) and
+  `random_rollout.py` (a readable env-loop example to copy from).
 - `tests/test_scene_smoke.py` — `uv run pytest`.
 
 You're free to change anything in here. Have fun.

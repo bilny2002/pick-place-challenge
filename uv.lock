@@ -1575,7 +1575,6 @@ source = { editable = "." }
 dependencies = [
     { name = "mjlab" },
     { name = "mujoco" },
-    { name = "mujoco-warp" },
     { name = "numpy" },
     { name = "objaverse" },
     { name = "pillow" },
@@ -1583,7 +1582,6 @@ dependencies = [
     { name = "torch" },
     { name = "trimesh" },
     { name = "tyro" },
-    { name = "warp-lang" },
 ]
 
 [package.dev-dependencies]
@@ -1597,7 +1595,6 @@ dev = [
 requires-dist = [
     { name = "mjlab", specifier = ">=1.4.0" },
     { name = "mujoco", specifier = ">=3.8.1" },
-    { name = "mujoco-warp", specifier = ">=3.8.1" },
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "objaverse", specifier = ">=0.1.7" },
     { name = "pillow", specifier = ">=12.2.0" },
@@ -1605,7 +1602,6 @@ requires-dist = [
     { name = "torch", specifier = ">=2.12.0" },
     { name = "trimesh", specifier = ">=4.12.2" },
     { name = "tyro", specifier = ">=1.0.13" },
-    { name = "warp-lang", specifier = ">=1.14.0" },
 ]
 
 [package.metadata.requires-dev]
