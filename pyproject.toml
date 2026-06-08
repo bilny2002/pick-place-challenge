@@ -30,13 +30,48 @@ pick-place-fetch-assets = "pick_place_challenge.scene:fetch_all_assets"
 [dependency-groups]
 dev = [
     "deptry>=0.25.1",
+    "prek>=0.4.4",
+    "pybind11-stubgen>=2.5.5",
     "pytest>=8",
     "ruff>=0.6",
+    "ty>=0.0.44",
 ]
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]
 build-backend = "uv_build"
 
+[tool.ruff]
+extend-exclude = [".typings"]  # generated mujoco stubs
+
 [tool.deptry]
 known_first_party = ["pick_place_challenge"]
+
+[tool.ty.environment]
+# mujoco is a pybind11 extension with no shipped stubs; generate them with
+#   uv run pybind11-stubgen --ignore-all-errors mujoco -o .typings
+extra-paths = [".typings"]
+
+[tool.ty.src]
+include = ["src", "scripts", "tests"]
+exclude = [".typings"]
+
+# scene.py is all MuJoCo/trimesh glue; their pybind/3rd-party stubs mistype
+# array-like property setters and load() unions, so silence those false
+# positives here (real type checking stays on everywhere else).
+[[tool.ty.overrides]]
+include = ["src/pick_place_challenge/scene.py"]
+[tool.ty.overrides.rules]
+invalid-assignment = "ignore"
+call-non-callable = "ignore"
+no-matching-overload = "ignore"
+unresolved-attribute = "ignore"
+
+# mjlab types step() obs values as Tensor, but our camera group is a dict; and
+# mujoco.viewer is a submodule the generated stubs don't cover.
+[[tool.ty.overrides]]
+include = ["scripts/**", "tests/**"]
+[tool.ty.overrides.rules]
+invalid-argument-type = "ignore"
+unresolved-import = "ignore"
+unresolved-attribute = "ignore"

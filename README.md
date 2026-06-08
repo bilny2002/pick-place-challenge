@@ -134,3 +134,23 @@ Just two modules — `scene.py` (the physical world) and `task.py` (the task):
 - `tests/test_scene_smoke.py` — `uv run pytest`.
 
 You're free to change anything in here. Have fun.
+
+## Development
+
+Quality gates run via [prek](https://github.com/j178/prek) (a fast pre-commit):
+
+```bash
+uv run prek install          # install the git hook (once)
+uv run prek run --all-files  # or run them all now
+```
+
+The hooks are `ruff format`, `ruff check`, `ty check` (type-checking), and
+`deptry` (dependency hygiene) — or run any individually, e.g. `uv run ty check`,
+`uv run pytest`.
+
+`ty` type-checks against MuJoCo via committed stubs in `.typings/` (MuJoCo ships
+none). They're pinned to the locked MuJoCo; regenerate only if you bump it:
+
+```bash
+uv run pybind11-stubgen --ignore-all-errors mujoco -o .typings
+```

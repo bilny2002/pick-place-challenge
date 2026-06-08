@@ -19,6 +19,7 @@ import json
 import math
 import subprocess
 import urllib.request
+from collections.abc import Sequence
 from pathlib import Path
 
 import mujoco
@@ -59,7 +60,7 @@ def _scanned_object_dir(name: str) -> Path:
     return _GSO_DIR / "models" / name
 
 
-def ensure_scanned_objects(names: tuple[str, ...] = CURATED_OBJECTS) -> None:
+def ensure_scanned_objects(names: Sequence[str] = CURATED_OBJECTS) -> None:
     """Sparse-checkout the named Scanned-Object dirs into the cache. Idempotent."""
     if all((_scanned_object_dir(n) / "model.xml").exists() for n in names):
         return
