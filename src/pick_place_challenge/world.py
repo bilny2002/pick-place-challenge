@@ -1,13 +1,15 @@
 """Scene backdrop injected via SceneCfg.spec_fn: a real room mesh + a table.
 
-The room is an actual modeled mesh (an Objaverse parking garage; see
-``room.py``), not a skybox/panorama — a panorama can't be a room you place a
-robot inside. It's visual-only geometry, so it renders in the native viewer, the
-camera observations, and the Viser browser viewer alike. The only collider is
-the table top at ``z = 0``, so the task/reward math is unchanged.
+The room is an actual modeled mesh (an Objaverse living room; see ``room.py``),
+not a skybox/panorama — a panorama can't be a room you place a robot inside.
+It's visual-only geometry, so it renders in the native viewer, the camera
+observations, and the Viser browser viewer alike. The only collider is the table
+top at ``z = 0``, so the task/reward math is unchanged.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import mujoco
 
@@ -16,6 +18,18 @@ _TABLE_CENTER = (0.3, 0.0)
 _TABLE_HALF = (0.45, 0.4)
 _TOP_THICK = 0.02
 _LEG = 0.03
+
+# Unit quad (2x2, +z normal) with UVs — for the wood table-top surface. Viser
+# only textures mesh geoms, so the visible top must be a mesh, not a box.
+_QUAD_OBJ = "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nf 1/1 2/2 3/3\nf 1/1 3/3 4/4\n"
+
+
+def _quad_obj_path() -> Path:
+    path = Path.home() / ".cache" / "pick_place_challenge" / "table_quad.obj"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_QUAD_OBJ)
+    return path
 
 
 def _add_material(spec, name, rgba, reflectance=0.0):
@@ -63,7 +77,14 @@ def add_studio(spec: mujoco.MjSpec) -> None:
 
     _add_room(spec)
 
-    _add_material(spec, "table_mat", (0.30, 0.22, 0.16, 1.0))
+    from pick_place_challenge.polyhaven import wood_texture_path
+
+    # Wood material for the table top (textured mesh) + dark legs/edge.
+    wood_tex = spec.add_texture(name="wood_tex", type=mujoco.mjtTexture.mjTEXTURE_2D)
+    wood_tex.file = str(wood_texture_path())
+    wood_mat = spec.add_material(name="wood_mat", reflectance=0.05)
+    wood_mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "wood_tex"
+    _add_material(spec, "edge_mat", (0.18, 0.12, 0.08, 1.0))  # table edge / collider
     _add_material(spec, "leg_mat", (0.20, 0.20, 0.22, 1.0))
     fh = -TABLE_HEIGHT
 
@@ -81,13 +102,26 @@ def add_studio(spec: mujoco.MjSpec) -> None:
         if not collide:
             g.contype, g.conaffinity = 0, 0
 
+    # Collider slab (top face at z=0) — gives the table thickness + physics.
     _box(
         "table_top",
         (cx, cy, -_TOP_THICK),
         (hx, hy, _TOP_THICK),
-        "table_mat",
+        "edge_mat",
         collide=True,
     )
+    # Wood-textured surface mesh laid on the slab top (visual only; shows in Viser).
+    quad = spec.add_mesh(name="table_top_mesh", file=str(_quad_obj_path()))
+    quad.scale = [hx, hy, 1.0]
+    quad.inertia = mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL
+    top = table.add_geom(name="table_top_visual")
+    top.type = mujoco.mjtGeom.mjGEOM_MESH
+    top.meshname = "table_top_mesh"
+    top.pos = [cx, cy, 0.001]
+    top.material = "wood_mat"
+    top.group = 2
+    top.contype, top.conaffinity = 0, 0
+
     # Legs span from just under the table top (z=0) down to the floor (z=fh),
     # so the feet sit exactly on the room floor.
     leg_half_h = abs(fh) / 2

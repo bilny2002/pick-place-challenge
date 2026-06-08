@@ -7,9 +7,10 @@ Franka Emika Panda and Robotiq 2F-85 MJCFs come from
 [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie),
 licensed under the Apache License 2.0 (with per-model licenses therein).
 
-## Ball mesh — Poly Haven
-The ball mesh (`baseball_01`) comes from [Poly Haven](https://polyhaven.com),
-released under **CC0** (public domain).
+## Ball mesh & wood texture — Poly Haven
+The ball mesh (`baseball_01`) and the table-top wood texture (`wood_table_001`)
+come from [Poly Haven](https://polyhaven.com), released under **CC0** (public
+domain).
 
 ## Room mesh — Objaverse
 The room is an Objaverse model (`778f5663…`, an empty parking garage), licensed

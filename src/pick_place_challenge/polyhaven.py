@@ -63,7 +63,22 @@ def ball_diffuse_path(asset_id: str = BALL_ID, res: str = "1k") -> Path:
     return png
 
 
+WOOD_ID = "wood_table_001"
+
+
+def wood_texture_path(asset_id: str = WOOD_ID, res: str = "2k") -> Path:
+    """Fetch a Poly Haven wood diffuse texture (PNG) for the table top."""
+    png = _CACHE / "textures" / f"{asset_id}_diff_{res}.png"
+    if png.exists():
+        return png
+    print(f"[pick-place-challenge] Fetching wood texture '{asset_id}'...")
+    url = _api(f"/files/{asset_id}")["Diffuse"][res]["png"]["url"]
+    _get(url, png)
+    return png
+
+
 def fetch_cli() -> None:
-    """Console entry point: pre-fetch the ball mesh."""
+    """Console entry point: pre-fetch the ball mesh and wood texture."""
     ball_obj_path()
+    wood_texture_path()
     print(f"[pick-place-challenge] Poly Haven assets ready in {_CACHE}")
