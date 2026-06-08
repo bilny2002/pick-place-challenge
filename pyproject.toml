@@ -9,8 +9,16 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "mjlab>=1.4.0",
+    "mujoco>=3.8.1",
+    "mujoco-warp>=3.8.1",
+    "numpy>=2.4.6",
     "objaverse>=0.1.7",
+    "pillow>=12.2.0",
     "robot-descriptions>=2.0.0",
+    "torch>=2.12.0",
+    "trimesh>=4.12.2",
+    "tyro>=1.0.13",
+    "warp-lang>=1.14.0",
 ]
 
 [project.scripts]
@@ -23,8 +31,15 @@ pick-place-fetch-assets = "pick_place_challenge.assets:fetch_cli"
 pick-place-fetch-ph = "pick_place_challenge.polyhaven:fetch_cli"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "deptry>=0.25.1",
+    "pytest>=8",
+    "ruff>=0.6",
+]
 
 [build-system]
 requires = ["uv_build>=0.9.18,<0.10.0"]
 build-backend = "uv_build"
+
+[tool.deptry]
+known_first_party = ["pick_place_challenge"]
