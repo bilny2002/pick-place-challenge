@@ -146,7 +146,8 @@ uv run prek run --all-files  # or run them all now
 
 The hooks are `ruff format`, `ruff check`, `ty check` (type-checking), and
 `deptry` (dependency hygiene) — or run any individually, e.g. `uv run ty check`,
-`uv run pytest`.
+`uv run pytest`. Zed users get this in-editor too: `.zed/settings.json` selects
+`ty` + `ruff` (and disables Zed's default basedpyright) so the editor matches.
 
 `ty` type-checks against MuJoCo via committed stubs in `.typings/` (MuJoCo ships
 none). They're pinned to the locked MuJoCo; regenerate only if you bump it:

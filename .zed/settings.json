@@ -1,0 +1,16 @@
+{
+  "languages": {
+    "Python": {
+      // Use ty (bundled with Zed) for type-checking and ruff for lint/format,
+      // to match the CLI / pre-commit gate. Disable Zed's default basedpyright
+      // so the editor doesn't double-check with a different config.
+      "language_servers": ["ty", "ruff", "!basedpyright", "!pyright", "!pylsp"],
+      "formatter": { "language_server": { "name": "ruff" } },
+      "format_on_save": "on",
+      "code_actions_on_format": {
+        "source.fixAll.ruff": true,
+        "source.organizeImports.ruff": true
+      }
+    }
+  }
+}
