@@ -1,5 +1,9 @@
 # pick-place-challenge
 
+![A Franka arm taking random actions in the scene, camera orbiting](docs/showcase.gif)
+
+> Random actions, camera orbiting — `uv run python scripts/showcase.py`.
+
 A small, self-contained robotics sandbox: a **Franka Panda + Robotiq 2F-85**
 that must **pick up a ball and place it in a bowl** on a table, inside a real
 modeled room (an Objaverse parking garage), using
@@ -129,8 +133,9 @@ Just two modules — `scene.py` (the physical world) and `task.py` (the task):
 - **`src/pick_place_challenge/task.py`** — where the env and its single MDP are
   wired together: the reach-and-place reward / observations / success check, the
   two env configs (`state_env_cfg`, `pixels_env_cfg`), and task registration.
-- `scripts/` — `view_scene.py` (pure-MuJoCo CPU viewer, no GPU needed) and
-  `random_rollout.py` (a readable env-loop example to copy from).
+- `scripts/` — `view_scene.py` (pure-MuJoCo CPU viewer, no GPU needed),
+  `random_rollout.py` (a readable env-loop example to copy from), and
+  `showcase.py` (renders the README GIF — random actions, orbiting camera).
 - `tests/test_scene_smoke.py` — `uv run pytest`.
 
 You're free to change anything in here. Have fun.
