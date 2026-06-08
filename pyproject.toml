@@ -27,8 +27,7 @@ dependencies = [
 play = "pick_place_challenge.cli:play"
 train = "pick_place_challenge.cli:train"
 pick-place-envs = "pick_place_challenge.cli:list_envs"
-pick-place-fetch-assets = "pick_place_challenge.assets:fetch_cli"
-pick-place-fetch-ph = "pick_place_challenge.polyhaven:fetch_cli"
+pick-place-fetch-assets = "pick_place_challenge.scene:fetch_all_assets"
 
 [dependency-groups]
 dev = [

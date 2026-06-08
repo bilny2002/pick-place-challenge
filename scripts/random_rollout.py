@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import torch
 import tyro
 
-import pick_place_challenge.tasks  # noqa: F401  (registers the tasks)
+import pick_place_challenge.task  # noqa: F401  (registers the tasks)
 from mjlab.envs import ManagerBasedRlEnv
 from mjlab.tasks.registry import load_env_cfg
 

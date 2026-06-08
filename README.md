@@ -26,8 +26,7 @@ Assets — the [Poly Haven](https://polyhaven.com) ball mesh, the scanned bowl f
 [mujoco_scanned_objects](https://github.com/kevinzakka/mujoco_scanned_objects),
 and the [Objaverse](https://objaverse.allenai.org) room mesh — are fetched on
 first use into `~/.cache` (the room is ~tens of MB, so first launch takes a
-moment). Pre-fetch with `uv run pick-place-fetch-assets` and
-`uv run pick-place-fetch-ph`.
+moment). Pre-fetch everything with `uv run pick-place-fetch-assets`.
 
 Drive it with a random policy and watch it in an interactive viewer:
 
@@ -112,24 +111,24 @@ or `--device cpu` style flags where mjlab exposes them, to stay on CPU.
 
 ## How it's built (for the curious)
 
-- `src/pick_place_challenge/robots/franka_robotiq.py` — assembles the arm +
-  gripper at runtime from [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie)
-  (pulled by `robot_descriptions`; nothing vendored). The 2F-85's full mimic
-  linkage is kept — it simulates correctly in MuJoCo-Warp.
-- `src/pick_place_challenge/objects.py` — the ball (a real Poly Haven mesh with a
-  sphere collider) and the bowl (a scanned object whose convex decomposition keeps
-  its cavity, so the ball nests inside). Tweak `BALL_DIAMETER`, `BOWL_NAME`.
-- `src/pick_place_challenge/polyhaven.py` / `assets.py` / `room.py` — on-demand
-  fetch of the Poly Haven ball, the scanned bowl, and the Objaverse room mesh.
-  Swap the room via `GARAGE_UID` in `room.py` (any Objaverse uid).
-- `src/pick_place_challenge/world.py` — the table + the room. The room is a real
-  textured mesh (visual-only), so it renders in the Viser browser viewer as well
-  as the native viewer/cameras. The table top at `z=0` is the only collider; the
-  rest is decor.
-- `src/pick_place_challenge/mdp.py` — the reach-and-place reward, ball→bowl
-  observation, and the "placed in bowl" success check.
-- `src/pick_place_challenge/tasks/` — the two env configs + registration, built on
-  mjlab's manipulation skeleton (Franka swapped in for the YAM arm).
+Just two modules — `scene.py` (the physical world) and `task.py` (the task):
+
+- **`src/pick_place_challenge/scene.py`** — everything physical, in one file:
+  - *Asset fetching* — the Franka + Robotiq MJCFs (MuJoCo Menagerie via
+    `robot_descriptions`), the ball mesh + wood texture (Poly Haven, CC0), the
+    bowl (a Google Scanned Object), and the room (Objaverse, CC-BY). Nothing
+    vendored; all fetched to `~/.cache`. Swap the room via `ROOM_UID`, the wood
+    via `WOOD_ID`, the bowl via `BOWL_NAME`.
+  - *Robot* — `build_franka_robotiq_spec` / `franka_robotiq_cfg` (the 2F-85's
+    full mimic linkage is kept; it simulates correctly in MuJoCo-Warp).
+  - *Objects* — `ball_spec` (real mesh + sphere collider) and `bowl_spec` (its
+    convex decomposition keeps the cavity, so the ball nests inside).
+  - *Room + table* — `add_studio`: a real textured room mesh + a wood table.
+    All visual-only meshes (so they render in Viser too); the table top at
+    `z=0` is the only collider.
+- **`src/pick_place_challenge/task.py`** — where the env and its single MDP are
+  wired together: the reach-and-place reward / observations / success check, the
+  two env configs (`state_env_cfg`, `pixels_env_cfg`), and task registration.
 - `scripts/` — `view_scene.py` (pure-MuJoCo viewer), `random_rollout.py`
   (env-loop example), `spike_warp.py` (the Warp compatibility check).
 - `tests/test_scene_smoke.py` — `uv run pytest`.

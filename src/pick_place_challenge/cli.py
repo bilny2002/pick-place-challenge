@@ -1,7 +1,7 @@
 """Console entry points that register our tasks, then defer to mjlab's CLIs.
 
 mjlab's own ``play``/``train`` only import mjlab's built-in tasks, so they can't
-see ``Mjlab-PickPlace-Franka-*``. These thin wrappers import our task module
+see ``Mjlab-PlaceBall-Franka-*``. These thin wrappers import our task module
 first (which registers into mjlab's shared registry) and then hand off to the
 exact same mjlab entry points.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 
 def _register() -> None:
-    import pick_place_challenge.tasks  # noqa: F401  (registration side effect)
+    import pick_place_challenge.task  # noqa: F401  (registration side effect)
 
 
 def play() -> None:

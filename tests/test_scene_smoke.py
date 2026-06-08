@@ -9,9 +9,9 @@ from __future__ import annotations
 import pytest
 import torch
 
-import pick_place_challenge.tasks  # noqa: F401  (registers tasks)
+import pick_place_challenge.task  # noqa: F401  (registers tasks)
 from mjlab.tasks.registry import list_tasks, load_env_cfg
-from pick_place_challenge.robots.franka_robotiq import (
+from pick_place_challenge.scene import (
     GRASP_SITE,
     GRIPPER_TENDON,
     build_franka_robotiq_spec,

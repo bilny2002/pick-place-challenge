@@ -1,6 +1,6 @@
-"""Franka + Robotiq pick-and-place sandbox on mjlab.
+"""Franka + Robotiq "place the ball in the bowl" sandbox on mjlab.
 
-Import ``pick_place_challenge.tasks`` to register the
-``Mjlab-PickPlace-Franka-State-v0`` and ``Mjlab-PickPlace-Franka-Pixels-v0``
-tasks into mjlab's registry.
+Two modules: ``scene`` (all physics/scene construction + asset fetching) and
+``task`` (the MDP, the env config, and task registration). Import
+``pick_place_challenge.task`` to register the ``Mjlab-PlaceBall-Franka-*`` tasks.
 """

@@ -13,7 +13,7 @@ Run: `uv run python scripts/spike_warp.py`
 import mujoco
 import numpy as np
 
-from pick_place_challenge.robots.franka_robotiq import build_franka_robotiq_spec
+from pick_place_challenge.scene import build_franka_robotiq_spec
 
 
 def describe(model: mujoco.MjModel) -> None:

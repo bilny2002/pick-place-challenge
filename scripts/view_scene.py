@@ -9,8 +9,7 @@ your install works and to look at the robot. Drag bodies to perturb them.
 import mujoco
 import mujoco.viewer
 
-from pick_place_challenge.robots.franka_robotiq import build_franka_robotiq_spec
-from pick_place_challenge.world import add_studio
+from pick_place_challenge.scene import add_studio, build_franka_robotiq_spec
 
 
 def build_scene_spec() -> mujoco.MjSpec:
