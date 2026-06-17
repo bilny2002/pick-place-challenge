@@ -16,13 +16,15 @@ reward is intentionally simple — rip it out and write your own.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import torch
 from mjlab.entity import Entity
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg, TendonLengthActionCfg
 from mjlab.managers.event_manager import EventTermCfg
+from mjlab.managers.metrics_manager import MetricsTermCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.managers.reward_manager import RewardTermCfg
 from mjlab.managers.scene_entity_config import SceneEntityCfg
@@ -34,18 +36,32 @@ from mjlab.tasks.manipulation.config.yam.rl_cfg import (
     yam_lift_cube_vision_ppo_runner_cfg,
 )
 from mjlab.tasks.manipulation.lift_cube_env_cfg import make_lift_cube_env_cfg
-from mjlab.tasks.manipulation.rl import ManipulationOnPolicyRunner
 from mjlab.tasks.registry import register_mjlab_task
 from mjlab.tasks.velocity import mdp
 from mjlab.utils.lab_api.math import quat_apply, quat_inv
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 
 from pick_place_challenge import scene
+from pick_place_challenge.runner import BankshotCheckpointRunner
 
 if TYPE_CHECKING:
     from mjlab.envs import ManagerBasedRlEnv
 
 _ROBOT = SceneEntityCfg("robot")
+FRONT_WALL_CENTER = (2.9, 0.0, 0.0)
+HER_DISTANCE_THRESHOLD = 0.10
+HER_SUCCESS_REWARD = 0.0
+HER_FAILURE_REWARD = -1.0
+_BALL_GEOMS = {"ball_collision", "ball_visual"}
+_FRONT_WALL_GEOMS = {"f_bounce_wall_geom"}
+_SIDE_WALL_GEOMS = {
+    "l_bounce_wall_geom",
+    "r_bounce_wall_geom",
+    "f_bounce_wall_geom",
+    "b_bounce_wall_geom",
+}
+_GROUND_GEOMS = {"d_bounce_wall_geom"}
+_TABLE_GEOMS = {"table_top"}
 
 
 # ============================================================================
@@ -108,6 +124,64 @@ def reach_and_place_reward(
     return reaching * (1.0 + placing)
 
 
+def ball_movement_reward(
+    env: ManagerBasedRlEnv,
+    object_name: str,
+    max_speed: float = 6.0,
+) -> torch.Tensor:
+    """Small bounded PPO reward for making the ball move."""
+    obj: Entity = env.scene[object_name]
+    speed = torch.linalg.norm(obj.data.root_link_lin_vel_w, dim=-1)
+    return torch.clamp(speed / max_speed, 0.0, 1.0)
+
+
+def early_joint_velocity_reward(
+    env: ManagerBasedRlEnv,
+    asset_cfg: SceneEntityCfg,
+    duration_s: float = 1.0,
+    max_speed: float = 6.0,
+) -> torch.Tensor:
+    """Reward fast arm motion during the opening throw window."""
+    robot: Entity = env.scene[asset_cfg.name]
+    joint_vel = robot.data.joint_vel[:, asset_cfg.joint_ids]
+    speed = torch.linalg.norm(joint_vel, dim=-1)
+    active = (env.episode_length_buf.float() * env.step_dt) <= duration_s
+    return torch.clamp(speed / max_speed, 0.0, 1.0) * active.float()
+
+
+def gripper_open_action(env: ManagerBasedRlEnv, open_action_threshold: float = -0.5):
+    """True when the current gripper command is opening the gripper."""
+    actions = mdp.last_action(env)
+    return actions[:, -1] <= open_action_threshold
+
+
+def ball_released(
+    env: ManagerBasedRlEnv,
+    object_name: str,
+    asset_cfg: SceneEntityCfg,
+    height_threshold: float = 0.02,
+    velocity_threshold: float = 0.05,
+) -> torch.Tensor:
+    """Detect when the ball has separated from the gripper palm.
+
+    The user-level condition is "ball centroid height != palm height and ball
+    velocity != palm velocity"; thresholds make that robust to sim noise.
+    """
+    robot: Entity = env.scene[asset_cfg.name]
+    ball: Entity = env.scene[object_name]
+
+    palm_pos = robot.data.site_pos_w[:, asset_cfg.site_ids].squeeze(1)
+    palm_vel = robot.data.site_lin_vel_w[:, asset_cfg.site_ids].squeeze(1)
+    ball_pos = ball.data.root_link_pos_w
+    ball_vel = ball.data.root_link_lin_vel_w
+
+    height_separated = torch.abs(ball_pos[:, 2] - palm_pos[:, 2]) > height_threshold
+    velocity_separated = (
+        torch.linalg.norm(ball_vel - palm_vel, dim=-1) > velocity_threshold
+    )
+    return height_separated & velocity_separated
+
+
 def placed_in_bowl(
     env: ManagerBasedRlEnv,
     object_name: str,
@@ -120,6 +194,414 @@ def placed_in_bowl(
     bowl_pos = env.scene[target_name].data.root_link_pos_w
     horizontal = torch.linalg.norm(obj_pos[:, :2] - bowl_pos[:, :2], dim=-1)
     return (horizontal < radius) & (obj_pos[:, 2] < bowl_pos[:, 2] + max_height)
+
+
+# ============================================================================
+# Ball gripped
+# ============================================================================
+
+
+def reset_ball_to_gripper(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    object_name: str = "ball",
+    robot_name: str = "robot",
+    asset_cfg: SceneEntityCfg = _ROBOT,
+    z_offset: float = 0.0,
+) -> None:
+    env_ids = mdp.resolve_env_ids(env, env_ids)
+
+    robot: Entity = env.scene[robot_name]
+    ball: Entity = env.scene[object_name]
+
+    # Make sure the pinch site reflects the just-reset robot joint state.
+    env.sim.forward()
+
+    ball_pose = ball.data.default_root_state[env_ids, :7].clone()
+    pinch_pos = robot.data.site_pos_w[env_ids, asset_cfg.site_ids].squeeze(1)
+
+    ball_pose[:, :3] = pinch_pos
+    ball_pose[:, 2] += z_offset
+
+    ball.write_root_link_pose_to_sim(ball_pose, env_ids=env_ids)
+    ball.write_root_link_velocity_to_sim(
+        torch.zeros((len(env_ids), 6), device=env.device), env_ids=env_ids
+    )
+
+
+# ============================================================================
+# HER observation terms
+# ============================================================================
+
+
+def full_observation(env: ManagerBasedRlEnv) -> torch.Tensor:
+    robot: Entity = env.scene["robot"]
+    ball: Entity = env.scene["ball"]
+    return torch.cat(
+        [
+            robot.data.joint_pos,
+            robot.data.joint_vel,
+            ball.data.root_link_pos_w,
+            desired_goal(env),
+            mdp.last_action(env),
+        ],
+        dim=-1,
+    )
+
+
+def achieved_goal(env: ManagerBasedRlEnv) -> torch.Tensor:
+    # The achieved goal should be the wall contact point if contact happened,
+    # otherwise use current ball position as fallback.
+    return env.scene["ball"].data.root_link_pos_w
+
+
+def desired_goal(env: ManagerBasedRlEnv) -> torch.Tensor:
+    # Center point of front wall.
+    # Your front wall is x = +2.9, y = 0, z around ball/contact height.
+    return torch.tensor(FRONT_WALL_CENTER, device=env.device).repeat(env.num_envs, 1)
+
+
+def bankshot_sparse_reward_np(
+    achieved_goal: np.ndarray,
+    desired_goal: np.ndarray,
+    info: dict[str, Any],
+    distance_threshold: float = HER_DISTANCE_THRESHOLD,
+    success_reward: float = HER_SUCCESS_REWARD,
+    failure_reward: float = HER_FAILURE_REWARD,
+) -> float | np.ndarray:
+    """HER-compatible sparse reward for wall-bankshot goals.
+
+    ``achieved_goal`` should be the ball's wall contact point when available.
+    For normal training ``desired_goal`` is the front-wall center; HER can pass a
+    substituted wall contact point. Goal-independent contact facts come from
+    ``info``.
+    """
+    achieved = np.asarray(achieved_goal, dtype=np.float32)
+    desired = np.asarray(desired_goal, dtype=np.float32)
+    single = achieved.ndim == 1
+
+    distance = np.linalg.norm(achieved - desired, axis=-1)
+    hit_wall = np.asarray(info.get("hit_wall", False), dtype=bool)
+    hit_front_wall = np.asarray(info.get("hit_front_wall", False), dtype=bool)
+    hit_table_first = np.asarray(info.get("hit_table_first", False), dtype=bool)
+
+    success = (
+        hit_wall & ~hit_table_first & (hit_front_wall | (distance < distance_threshold))
+    )
+    reward = np.where(success, success_reward, failure_reward)
+    return reward.item() if single else reward
+
+
+def _tensor_like_to_numpy(value):
+    if hasattr(value, "detach"):
+        return value.detach().cpu().numpy()
+    if hasattr(value, "numpy"):
+        return value.numpy()
+    return np.asarray(value)
+
+
+def _iter_named_contacts(env: ManagerBasedRlEnv):
+    contact = getattr(getattr(env.sim, "data", None), "contact", None)
+    contact = getattr(contact, "struct", None)
+    if contact is None or not hasattr(contact, "geom"):
+        return []
+
+    try:
+        geoms = _tensor_like_to_numpy(contact.geom)
+        if hasattr(contact, "worldid"):
+            world_ids = _tensor_like_to_numpy(contact.worldid)
+        else:
+            world_ids = np.zeros(np.reshape(geoms, (-1, 2)).shape[0], dtype=int)
+    except Exception:
+        return []
+
+    if geoms.size == 0:
+        return []
+
+    names = {
+        idx: env.sim.mj_model.geom(idx).name for idx in range(env.sim.mj_model.ngeom)
+    }
+    events = []
+    geom_pairs = np.reshape(geoms, (-1, 2))
+    world_ids = np.reshape(world_ids, (-1,))
+    for idx, pair in enumerate(geom_pairs):
+        geom_a = names.get(int(pair[0]))
+        geom_b = names.get(int(pair[1]))
+        if geom_a is None or geom_b is None:
+            continue
+        events.append(
+            (int(world_ids[idx]), geom_a.split("/")[-1], geom_b.split("/")[-1])
+        )
+    return events
+
+
+class FrontWallHitMetric:
+    """Tracks whether each env has hit the front wall during the episode."""
+
+    def __init__(self) -> None:
+        self._hit_front_wall: torch.Tensor | None = None
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        if self._hit_front_wall is None:
+            return
+        if env_ids is None:
+            env_ids = slice(None)
+        self._hit_front_wall[env_ids] = False
+
+    def __call__(self, env: ManagerBasedRlEnv) -> torch.Tensor:
+        if self._hit_front_wall is None or len(self._hit_front_wall) != env.num_envs:
+            self._hit_front_wall = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+
+        for env_id, geom_a, geom_b in _iter_named_contacts(env):
+            if env_id < 0 or env_id >= env.num_envs:
+                continue
+            names = {geom_a, geom_b}
+            if (names & _BALL_GEOMS) and (names & _FRONT_WALL_GEOMS):
+                self._hit_front_wall[env_id] = True
+        return self._hit_front_wall.float()
+
+
+class BallReleasedMetric:
+    """Tracks whether each env has released the ball during the episode."""
+
+    def __init__(self) -> None:
+        self._released: torch.Tensor | None = None
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        if self._released is None:
+            return
+        if env_ids is None:
+            env_ids = slice(None)
+        self._released[env_ids] = False
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        object_name: str,
+        asset_cfg: SceneEntityCfg,
+        height_threshold: float = 0.02,
+        velocity_threshold: float = 0.05,
+    ) -> torch.Tensor:
+        if self._released is None or len(self._released) != env.num_envs:
+            self._released = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+
+        self._released |= ball_released(
+            env,
+            object_name=object_name,
+            asset_cfg=asset_cfg,
+            height_threshold=height_threshold,
+            velocity_threshold=velocity_threshold,
+        )
+        return self._released.float()
+
+
+class EarlyGripperOpenReward:
+    """One-time reward for opening the gripper early."""
+
+    def __init__(self) -> None:
+        self._rewarded: torch.Tensor | None = None
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        if self._rewarded is None:
+            return
+        if env_ids is None:
+            env_ids = slice(None)
+        self._rewarded[env_ids] = False
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        deadline_s: float = 1.0,
+        open_action_threshold: float = -0.5,
+    ) -> torch.Tensor:
+        if self._rewarded is None or len(self._rewarded) != env.num_envs:
+            self._rewarded = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+
+        elapsed = env.episode_length_buf.float() * env.step_dt
+        should_reward = (
+            (elapsed <= deadline_s)
+            & gripper_open_action(env, open_action_threshold)
+            & ~self._rewarded
+        )
+        self._rewarded |= should_reward
+        return should_reward.float()
+
+
+class GripperNotOpenedPenalty:
+    """One-time penalty when the gripper has not opened by a deadline."""
+
+    def __init__(self) -> None:
+        self._opened: torch.Tensor | None = None
+        self._penalized: torch.Tensor | None = None
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        if self._opened is None or self._penalized is None:
+            return
+        if env_ids is None:
+            env_ids = slice(None)
+        self._opened[env_ids] = False
+        self._penalized[env_ids] = False
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        deadline_s: float = 2.0,
+        open_action_threshold: float = -0.5,
+    ) -> torch.Tensor:
+        if (
+            self._opened is None
+            or self._penalized is None
+            or len(self._opened) != env.num_envs
+        ):
+            self._opened = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+            self._penalized = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+
+        self._opened |= gripper_open_action(env, open_action_threshold)
+        elapsed = env.episode_length_buf.float() * env.step_dt
+        should_penalize = (elapsed >= deadline_s) & ~self._opened & ~self._penalized
+        self._penalized |= should_penalize
+        return should_penalize.float()
+
+
+class BallContactSequenceReward:
+    """One-time reward for episode contact milestones."""
+
+    def __init__(self) -> None:
+        self._hit_table: torch.Tensor | None = None
+        self._hit_ground: torch.Tensor | None = None
+        self._rewarded: torch.Tensor | None = None
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        if self._hit_table is None or self._hit_ground is None or self._rewarded is None:
+            return
+        if env_ids is None:
+            env_ids = slice(None)
+        self._hit_table[env_ids] = False
+        self._hit_ground[env_ids] = False
+        self._rewarded[env_ids] = False
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        mode: str,
+    ) -> torch.Tensor:
+        if (
+            self._hit_table is None
+            or self._hit_ground is None
+            or self._rewarded is None
+            or len(self._hit_table) != env.num_envs
+        ):
+            self._hit_table = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+            self._hit_ground = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+            self._rewarded = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+
+        reward = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
+
+        for env_id, geom_a, geom_b in _iter_named_contacts(env):
+            if env_id < 0 or env_id >= env.num_envs:
+                continue
+
+            names = {geom_a, geom_b}
+            if not (names & _BALL_GEOMS):
+                continue
+
+            hit_table_now = bool(names & _TABLE_GEOMS)
+            hit_ground_now = bool(names & _GROUND_GEOMS)
+            hit_wall_now = bool(names & _SIDE_WALL_GEOMS)
+
+            hit_bad_surface_first = bool(
+                self._hit_table[env_id] or self._hit_ground[env_id]
+            )
+            if mode == "wall_without_table_or_ground_first":
+                should_reward = (
+                    hit_wall_now
+                    and not hit_bad_surface_first
+                    and not hit_table_now
+                    and not hit_ground_now
+                )
+            elif mode == "table":
+                should_reward = hit_table_now
+            elif mode == "ground":
+                should_reward = hit_ground_now
+            else:
+                raise ValueError(f"Unknown ball contact reward mode: {mode}")
+
+            if should_reward and not bool(self._rewarded[env_id]):
+                reward[env_id] = 1.0
+                self._rewarded[env_id] = True
+
+            if hit_table_now:
+                self._hit_table[env_id] = True
+            if hit_ground_now:
+                self._hit_ground[env_id] = True
+
+        return reward
+
+
+class NoGroundContactAfterTimeout:
+    """Terminates envs whose ball did not touch the bounce floor in time."""
+
+    def __init__(self) -> None:
+        self._hit_ground: torch.Tensor | None = None
+
+    def reset(self, env_ids: torch.Tensor | slice | None = None) -> None:
+        if self._hit_ground is None:
+            return
+        if env_ids is None:
+            env_ids = slice(None)
+        self._hit_ground[env_ids] = False
+
+    def __call__(
+        self,
+        env: ManagerBasedRlEnv,
+        timeout_s: float = 5.0,
+    ) -> torch.Tensor:
+        if self._hit_ground is None or len(self._hit_ground) != env.num_envs:
+            self._hit_ground = torch.zeros(
+                env.num_envs, dtype=torch.bool, device=env.device
+            )
+
+        for env_id, geom_a, geom_b in _iter_named_contacts(env):
+            if env_id < 0 or env_id >= env.num_envs:
+                continue
+            names = {geom_a, geom_b}
+            if (names & _BALL_GEOMS) and (names & _GROUND_GEOMS):
+                self._hit_ground[env_id] = True
+
+        elapsed = env.episode_length_buf.float() * env.step_dt
+        return (elapsed >= timeout_s) & ~self._hit_ground
+
+
+class BallWallContactTermination:
+    """Terminates envs once the ball touches any side bounce wall."""
+
+    def __call__(self, env: ManagerBasedRlEnv) -> torch.Tensor:
+        terminated = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+        for env_id, geom_a, geom_b in _iter_named_contacts(env):
+            if env_id < 0 or env_id >= env.num_envs:
+                continue
+            names = {geom_a, geom_b}
+            if (names & _BALL_GEOMS) and (names & _SIDE_WALL_GEOMS):
+                terminated[env_id] = True
+
+        return terminated
 
 
 # ============================================================================
@@ -191,46 +673,110 @@ def state_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
     cfg.observations = {
         "actor": ObservationGroupCfg(actor, enable_corruption=True),
         "critic": ObservationGroupCfg(dict(actor), enable_corruption=False),
+        # HER/GoalEnv observations are intentionally disabled for PPO-only
+        # training. Keep the helper functions above for later HER experiments.
+        # "goal": ObservationGroupCfg(
+        #     {
+        #         "observation": ObservationTermCfg(func=full_observation),
+        #         "achieved_goal": ObservationTermCfg(func=achieved_goal),
+        #         "desired_goal": ObservationTermCfg(func=desired_goal),
+        #     },
+        #     concatenate_terms=False,
+        # ),
     }
 
     cfg.commands = {}
     cfg.rewards = {
-        "reach_place": RewardTermCfg(
-            func=reach_and_place_reward,
-            weight=1.0,
+        # "reach_place": RewardTermCfg(
+        #     func=reach_and_place_reward,
+        #     weight=1.0,
+        #     params={
+        #         "object_name": "ball",
+        #         "target_name": "bowl",
+        #         "reaching_std": 0.1,
+        #         "placing_std": 0.1,
+        #         "asset_cfg": _grasp_site(),
+        #     },
+        # ),
+        "ball_movement": RewardTermCfg(
+            func=ball_movement_reward,
+            weight=3.0,
+            params={"object_name": "ball", "max_speed": 6.0},
+        ),
+        "early_gripper_open": RewardTermCfg(
+            func=EarlyGripperOpenReward(),
+            weight=0.2,
+            params={"deadline_s": 2.0, "open_action_threshold": -0.5},
+        ),
+        "early_joint_velocity": RewardTermCfg(
+            func=early_joint_velocity_reward,
+            weight=0.08,
             params={
-                "object_name": "ball",
-                "target_name": "bowl",
-                "reaching_std": 0.1,
-                "placing_std": 0.1,
-                "asset_cfg": _grasp_site(),
+                "asset_cfg": SceneEntityCfg(
+                    "robot", joint_names=("joint4")
+                ),
+                "duration_s": 2.0,
+                "max_speed": 6.0,
             },
         ),
-        "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.01),
-        "joint_pos_limits": RewardTermCfg(
-            func=mdp.joint_pos_limits,
-            weight=-10.0,
-            params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+        "ball_wall_without_table_or_ground_first": RewardTermCfg(
+            func=BallContactSequenceReward(),
+            weight=6.0,
+            params={"mode": "wall_without_table_or_ground_first"},
+        ),
+        "gripper_not_opened_by_2s": RewardTermCfg(
+            func=GripperNotOpenedPenalty(),
+            weight=-0.6,
+            params={"deadline_s": 2.0, "open_action_threshold": -0.5},
+        ),
+        "ball_hit_table_penalty": RewardTermCfg(
+            func=BallContactSequenceReward(),
+            weight=-1.0,
+            params={"mode": "table"},
+        ),
+        "ball_hit_ground_penalty": RewardTermCfg(
+            func=BallContactSequenceReward(),
+            weight=-1.0,
+            params={"mode": "ground"},
         ),
     }
     cfg.terminations = {
         "time_out": TerminationTermCfg(func=mdp.time_out, time_out=True),
-        "placed": TerminationTermCfg(
-            func=placed_in_bowl,
-            params={"object_name": "ball", "target_name": "bowl"},
+        "ball_hit_wall": TerminationTermCfg(
+            func=BallWallContactTermination(),
+        ),
+        "no_ground_contact_after_5s": TerminationTermCfg(
+            func=NoGroundContactAfterTimeout(),
+            params={"timeout_s": 5.0},
         ),
     }
     cfg.curriculum = {}
-    cfg.events = {
-        "reset_ball": EventTermCfg(
-            func=mdp.reset_root_state_uniform,
-            mode="reset",
-            params={
-                "pose_range": {"x": (-0.05, 0.08), "y": (-0.08, 0.08)},
-                "velocity_range": {},
-                "asset_cfg": SceneEntityCfg("ball"),
-            },
+    cfg.metrics = {
+        "front_wall_hit_rate": MetricsTermCfg(
+            func=FrontWallHitMetric(),
+            reduce="last",
         ),
+        "ball_released_rate": MetricsTermCfg(
+            func=BallReleasedMetric(),
+            params={
+                "object_name": "ball",
+                "asset_cfg": _grasp_site(),
+                "height_threshold": 0.02,
+                "velocity_threshold": 0.05,
+            },
+            reduce="last",
+        ),
+    }
+    cfg.events = {
+        # "reset_ball": EventTermCfg(
+        #     func=mdp.reset_root_state_uniform,
+        #     mode="reset",
+        #     params={
+        #         "pose_range": {"x": (-0.05, 0.08), "y": (-0.08, 0.08)},
+        #         "velocity_range": {},
+        #         "asset_cfg": SceneEntityCfg("ball"),
+        #     },
+        # ),
         "reset_robot_joints": EventTermCfg(
             func=mdp.reset_joints_by_offset,
             mode="reset",
@@ -238,6 +784,16 @@ def state_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
                 "position_range": (0.0, 0.0),
                 "velocity_range": (0.0, 0.0),
                 "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+            },
+        ),
+        "reset_ball_to_gripper": EventTermCfg(
+            func=reset_ball_to_gripper,
+            mode="reset",
+            params={
+                "object_name": "ball",
+                "robot_name": "robot",
+                "asset_cfg": _grasp_site(),
+                "z_offset": 0.0,
             },
         ),
     }
@@ -347,12 +903,12 @@ register_mjlab_task(
     env_cfg=state_env_cfg(),
     play_env_cfg=state_env_cfg(play=True),
     rl_cfg=_rl_cfg(False, "franka_place_ball_state"),
-    runner_cls=ManipulationOnPolicyRunner,
+    runner_cls=BankshotCheckpointRunner,
 )
 register_mjlab_task(
     task_id="Mjlab-PlaceBall-Franka-Pixels-v0",
     env_cfg=pixels_env_cfg(),
     play_env_cfg=pixels_env_cfg(play=True),
     rl_cfg=_rl_cfg(True, "franka_place_ball_pixels"),
-    runner_cls=ManipulationOnPolicyRunner,
+    runner_cls=BankshotCheckpointRunner,
 )

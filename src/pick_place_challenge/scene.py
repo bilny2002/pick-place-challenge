@@ -272,7 +272,13 @@ def franka_robotiq_cfg() -> EntityCfg:
     return EntityCfg(
         init_state=EntityCfg.InitialStateCfg(
             pos=(0.0, 0.0, 0.0),
-            joint_pos={**_HOME_ARM, ".*": 0.0},
+            #joint_pos={**_HOME_ARM, ".*": 0.0},
+            joint_pos={
+            **_HOME_ARM,
+            ".*": 0.0,
+            "right_driver_joint": 0.55,
+            "left_driver_joint": 0.55,
+        },
             joint_vel={".*": 0.0},
         ),
         spec_fn=build_franka_robotiq_spec,
@@ -340,6 +346,40 @@ def bowl_spec() -> mujoco.MjSpec:
         mesh.scale = (np.array(mesh.scale) * scale).tolist()
     return spec
 
+# ============================================================================
+# 3.1. Walls and floor
+# ============================================================================
+# Enclosure: half-extents in MuJoCo box coordinates.
+_WALL_X_HALF = 2.9
+_WALL_Y_HALF = 3.0
+_WALL_THICK = 0.01
+_WALL_Z_CENTER = 1.10
+_WALL_Z_HALF = 1.50
+_FLOOR_Z = -0.41
+_ROOF_Z = 2.61
+
+
+def add_bounce_enclosure(spec: mujoco.MjSpec) -> None:
+    """Visible fixed walls/floor/roof that collide with the ball."""
+    mat = spec.add_material(name="bounce_wall_mat")
+    mat.rgba = [0.15, 0.35, 0.95, 1.0]
+
+    def wall(name: str, pos: tuple[float, float, float], size: tuple[float, float, float]) -> None:
+        body = spec.worldbody.add_body(name=name, pos=pos)
+        geom = body.add_geom(name=f"{name}_geom")
+        geom.type = mujoco.mjtGeom.mjGEOM_BOX
+        geom.size = list(size)
+        geom.material = "bounce_wall_mat"
+        geom.group = 3
+        geom.solref = [0.01, 0.4]
+        geom.friction = [0.8, 0.02, 0.001]
+
+    wall("l_bounce_wall", (0.0, 3.0, _WALL_Z_CENTER), (_WALL_X_HALF, _WALL_THICK, _WALL_Z_HALF))
+    wall("r_bounce_wall", (0.0, -3.0, _WALL_Z_CENTER), (_WALL_X_HALF, _WALL_THICK, _WALL_Z_HALF))
+    wall("f_bounce_wall", (2.9, 0.0, _WALL_Z_CENTER), (_WALL_THICK, _WALL_Y_HALF, _WALL_Z_HALF))
+    wall("b_bounce_wall", (-2.9, 0.0, _WALL_Z_CENTER), (_WALL_THICK, _WALL_Y_HALF, _WALL_Z_HALF))
+    wall("u_bounce_wall", (0.0, 0.0, _ROOF_Z), (_WALL_X_HALF, _WALL_Y_HALF, _WALL_THICK))
+    wall("d_bounce_wall", (0.0, 0.0, _FLOOR_Z), (_WALL_X_HALF, _WALL_Y_HALF, _WALL_THICK))
 
 # ============================================================================
 # 4. Room + table — the SceneCfg.spec_fn backdrop
@@ -376,6 +416,9 @@ def add_studio(spec: mujoco.MjSpec) -> None:
     a room you sit a robot in). It's visual-only; the only collider is the table
     top at z=0, so the task is unchanged.
     """
+    #   walls
+    add_bounce_enclosure(spec)
+
     spec.visual.headlight.ambient = [0.4, 0.4, 0.4]
     spec.visual.headlight.diffuse = [0.5, 0.5, 0.5]
     key = spec.worldbody.add_light()
@@ -385,25 +428,25 @@ def add_studio(spec: mujoco.MjSpec) -> None:
     key.castshadow = True
     key.diffuse = [0.7, 0.7, 0.7]
 
-    # --- Room mesh (visual only). Floor dropped to the table-leg height, rotated
-    # 180° about z so the robot faces in, shifted +1m in x so the table lands on
-    # open floor rather than in the room's furniture.
-    obj, tex = room_obj_path()
-    rmesh = spec.add_mesh(name="room_mesh", file=str(obj))
-    rmesh.inertia = mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL
-    rtex = spec.add_texture(name="room_tex", type=mujoco.mjtTexture.mjTEXTURE_2D)
-    rtex.file = str(tex)
-    rmat = spec.add_material(name="room_mat")
-    rmat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "room_tex"
-    room = spec.worldbody.add_body(name="room")
-    rg = room.add_geom(name="room_geom")
-    rg.type = mujoco.mjtGeom.mjGEOM_MESH
-    rg.meshname = "room_mesh"
-    rg.material = "room_mat"
-    rg.pos = [_TABLE_CENTER[0] + 1.0, _TABLE_CENTER[1], -TABLE_HEIGHT]
-    rg.quat = [0.0, 0.0, 0.0, 1.0]
-    rg.group = 2
-    rg.contype, rg.conaffinity = 0, 0
+    # # --- Room mesh (visual only). Floor dropped to the table-leg height, rotated
+    # # 180° about z so the robot faces in, shifted +1m in x so the table lands on
+    # # open floor rather than in the room's furniture.
+    # obj, tex = room_obj_path()
+    # rmesh = spec.add_mesh(name="room_mesh", file=str(obj))
+    # rmesh.inertia = mujoco.mjtMeshInertia.mjMESH_INERTIA_SHELL
+    # rtex = spec.add_texture(name="room_tex", type=mujoco.mjtTexture.mjTEXTURE_2D)
+    # rtex.file = str(tex)
+    # rmat = spec.add_material(name="room_mat")
+    # rmat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "room_tex"
+    # room = spec.worldbody.add_body(name="room")
+    # rg = room.add_geom(name="room_geom")
+    # rg.type = mujoco.mjtGeom.mjGEOM_MESH
+    # rg.meshname = "room_mesh"
+    # rg.material = "room_mat"
+    # rg.pos = [_TABLE_CENTER[0] + 1.0, _TABLE_CENTER[1], -TABLE_HEIGHT]
+    # rg.quat = [0.0, 0.0, 0.0, 1.0]
+    # rg.group = 2
+    # rg.contype, rg.conaffinity = 0, 0
 
     # --- Table: wood-textured top mesh on a thin collider slab + dark legs.
     wtex = spec.add_texture(name="wood_tex", type=mujoco.mjtTexture.mjTEXTURE_2D)

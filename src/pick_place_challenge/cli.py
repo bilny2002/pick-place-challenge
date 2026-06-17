@@ -22,6 +22,10 @@ def play() -> None:
 
 def train() -> None:
     _register()
+    # PPO-only training for now. HER/GoalEnv wrapping stays available in
+    # her_goal_env.py, but is intentionally not initialized here.
+    # from pick_place_challenge.her_goal_env import HerGoalEnvWrapper
+    # env = HerGoalEnvWrapper(env)
     from mjlab.scripts.train import main
 
     main()
